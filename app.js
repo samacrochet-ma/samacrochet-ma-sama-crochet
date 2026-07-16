@@ -37,7 +37,18 @@ const SHEET_API = "https://script.google.com/macros/s/AKfycbz0rv4T0A2dFlAcNHc9Ll
 const WHATSAPP_NUMBER = "212621091399";
 
 let useCloud = false;
-let adminPassword = ''; // كتتخزن مؤقتاً فالمتصفح بعد الدخول الصحيح، ماكاينش مكتوبة فالكود
+let adminPassword = '';
+
+// ══════════════════════════════
+//  🔑 تطبيع اسم التصنيف: كيحمي من حالة كتب حد اسم
+//  التصنيف بالعربية أو بأحرف كبيرة أو بمسافات زايدة فالشيت
+// ══════════════════════════════
+function normalizeCat(raw){
+  const c = String(raw||'').toLowerCase().trim();
+  if(['keychains','dolls','flowers','accessories'].includes(c)) return c;
+  const reverseMap = {'سلاسل مفاتيح':'keychains','دمى':'dolls','ورود':'flowers','إكسسوارات':'accessories'};
+  return reverseMap[String(raw||'').trim()] || c;
+}
 
 // ══ تحميل المنتجات من Google Sheets ══
 async function loadProductsFromCloud() {
@@ -49,7 +60,7 @@ async function loadProductsFromCloud() {
       products = data.products.map(p => ({
         ...p,
         id:       Number(p.id),
-        cat:      String(p.cat || '').toLowerCase().trim(), // توحيد الفئة لحروف صغيرة (كانت السبب فمشكل الفلترة)
+        cat:      normalizeCat(p.cat),
         price:    Number(p.price)    || 0,
         oldPrice: Number(p.oldPrice) || 0,
         stock:    Number(p.stock)    || 0,
@@ -62,7 +73,7 @@ async function loadProductsFromCloud() {
   renderProducts();
 }
 
-// ══ حفظ طلب جديد فـ Google Sheets (POST — السيرفر كيتحقق من المخزون والسعر وكيرجع رقم طلب فريد) ══
+// ══ حفظ طلب جديد فـ Google Sheets ══
 async function saveOrderToSheet(order) {
   try {
     const res = await fetch(SHEET_API, {
@@ -75,7 +86,7 @@ async function saveOrderToSheet(order) {
         address: order.address || '',
         notes: order.notes || '',
         items: order.items.map(i => ({ id: i.id, qty: i.qty })),
-        website: order.website || '' // حقل مخفي (honeypot) لكشف الطلبات الآلية الوهمية
+        website: order.website || ''
       })
     });
     return await res.json();
@@ -176,7 +187,6 @@ async function changeOrderStatus(selectEl) {
   }
 }
 
-// ══ عمليات المنتجات المحمية بكلمة السر (addProduct / updateProduct / deleteProduct) ══
 async function apiCall(action, payload = {}) {
   const protectedActions = ['addProduct', 'updateProduct', 'deleteProduct', 'updateOrderStatus', 'getStats'];
   const body = protectedActions.includes(action)
@@ -198,7 +208,6 @@ async function apiCall(action, payload = {}) {
 
 // ══════════════════════════════
 //  منتجاتك الأصلية (43 منتج) — نسخة احتياطية محلية
-//  الصور خاصها تكون فمجلد images/ بجانب index.html: images/1.jpg ... images/43.jpg
 // ══════════════════════════════
 let products = JSON.parse(localStorage.getItem('sama_products')) || [
   {id:1,cat:'keychains',name:'Chicken with Flowers',desc:'كتكوت لطيف مع ورود كروشيه ♡',price:46,oldPrice:0,stock:10,img:'images/1.jpg'},
@@ -270,25 +279,21 @@ function showPage(id){
   if(id==='home') renderFeatured();
 }
 
-// ══ التنقل من القائمة الجانبية (Off-Canvas) ══
 function goToPage(id){
   closeSideMenu();
   showPage(id);
 }
 
-// كتوجه لصفحة المنتجات وكتفعّل فلتر معين (تصنيف حقيقي، أو "sale"، أو "new")
 function goToProducts(cat){
   closeSideMenu();
   showPage('products');
   currentFilter = cat;
-  // نبدلو الزر النشيط فشريط الفلاتر إلى كيتطابق (إلا كان موجود)
   document.querySelectorAll('.filter-btn').forEach(b=>{
     b.classList.toggle('active', b.dataset.cat===cat);
   });
   renderProducts();
 }
 
-// الطلبات الخاصة: كتوجه لصفحة تواصل معنا مع رسالة جاهزة
 function goToCustomOrder(){
   closeSideMenu();
   showPage('contact');
@@ -296,7 +301,6 @@ function goToCustomOrder(){
   if(msgEl && !msgEl.value) msgEl.value = 'مرحبا، عندي فكرة لطلب مخصص (لون/حجم/تصميم خاص)، بغيت نتواصل معاكم بخصوصها.';
 }
 
-// حساب المستخدم: ميزة مستقبلية (ماكاينش نظام تسجيل دخول حاليا)
 function openMyAccount(){
   closeSideMenu();
   toast('ميزة "حسابي" غادي تكون متوفرة قريبا ✨','');
@@ -319,7 +323,7 @@ function closeSideMenu(){
 }
 
 // ══════════════════════════════
-//  شريط البحث السريع (فالهيدر)
+//  شريط البحث السريع
 // ══════════════════════════════
 function openSearchBar(){
   document.getElementById('quickSearchBar').classList.add('open');
@@ -330,7 +334,7 @@ function closeSearchBar(){
 }
 
 // ══════════════════════════════
-//  Info Modal (سياسات الفوتر)
+//  Info Modal
 // ══════════════════════════════
 const INFO_CONTENT = {
   terms: {
@@ -376,7 +380,7 @@ function openInfoModal(key){
 }
 
 // ══════════════════════════════
-//  تتبع الطلب الحقيقي (بحث عن الطلبات عبر رقم الهاتف فـ Google Sheets)
+//  تتبع الطلب الحقيقي
 // ══════════════════════════════
 function openTrackModal(){
   document.getElementById('trackResults').innerHTML='';
@@ -396,7 +400,6 @@ async function trackOrderByPhone(){
     const res = await fetch(SHEET_API + '?action=getOrders');
     const data = await res.json();
     const allOrders = (data.status==='ok' && data.orders) ? data.orders : [];
-    // مقارنة الأرقام بعد تنظيفها من الرموز (0/212 فأول الرقم)
     const cleanInput = phone.replace(/[^0-9]/g,'').replace(/^212/,'0');
     const matches = allOrders.filter(o=>{
       const oPhone = String(o.phone||'').replace(/[^0-9]/g,'').replace(/^212/,'0');
@@ -412,7 +415,7 @@ async function trackOrderByPhone(){
     }
 
     box.innerHTML = matches.map(o=>{
-      const status = o.status || 'قيد المعالجة'; // إلا ماكانش عمود Status فالشيت، كنعرضو حالة افتراضية
+      const status = o.status || 'قيد المعالجة';
       const items = typeof o.items === 'string' ? o.items : (o.items||[]).map(it=>it.name+' x'+it.qty).join(', ');
       return `<div class="order-card" style="margin-bottom:10px;">
         <div class="order-card-header">
@@ -434,7 +437,7 @@ async function trackOrderByPhone(){
 }
 
 // ══════════════════════════════
-//  Ripple Effect (تأثير التموج عند الضغط على الأزرار)
+//  Ripple Effect
 // ══════════════════════════════
 function initRippleEffect(){
   document.addEventListener('click', function(e){
@@ -454,7 +457,7 @@ function initRippleEffect(){
 }
 
 // ══════════════════════════════
-//  UTIL: Debounce (لتأخير البحث وتخفيف الحمل عن كل ضغطة حرف)
+//  UTIL: Debounce
 // ══════════════════════════════
 function debounce(fn, delay){
   let t;
@@ -465,7 +468,7 @@ function debounce(fn, delay){
 }
 
 // ══════════════════════════════
-//  Loading Skeleton (هيكل تحميل وقت جلب المنتجات من الشيت)
+//  Loading Skeleton
 // ══════════════════════════════
 function skeletonHTML(count){
   let html='';
@@ -506,7 +509,6 @@ function stockLabel(s){
   return '<span class="stock-badge">متوفر ✓</span>';
 }
 
-// كتجمع كل صور المنتج المتوفرة (الصورة الرئيسية + صور إضافية اختيارية img2/img3)
 function getProductImages(p){
   return [p.img, p.img2, p.img3].filter(Boolean);
 }
@@ -539,7 +541,6 @@ function createCard(p){
   return div;
 }
 
-// الفئات اللي عندها منتجات حقيقية فقاعدة البيانات حاليا
 const REAL_CATEGORIES = ['keychains','dolls','flowers','accessories'];
 
 function renderProducts(){
@@ -549,14 +550,14 @@ function renderProducts(){
   let list=products.filter(p=>{
     let catOk;
     if(currentFilter==='all')       catOk=true;
-    else if(currentFilter==='new')  catOk=true; // "جديد" = كل المنتجات، مرتبة بالأحدث بعد الفلترة
-    else if(currentFilter==='sale') catOk = p.oldPrice && p.oldPrice > p.price; // التخفيضات
+    else if(currentFilter==='new')  catOk=true;
+    else if(currentFilter==='sale') catOk = p.oldPrice && p.oldPrice > p.price;
     else catOk = String(p.cat).toLowerCase()===currentFilter;
     const qOk=!q||p.name.toLowerCase().includes(q.toLowerCase())||p.desc.includes(q);
     return catOk&&qOk;
   });
 
-  if(currentFilter==='new') list = list.slice().reverse(); // الأحدث أولا
+  if(currentFilter==='new') list = list.slice().reverse();
 
   grid.innerHTML='';
   list.forEach((p,i)=>{
@@ -599,7 +600,6 @@ function openModal(id){
   const imgWrap=document.getElementById('modalImgWrap');
   const imgs = getProductImages(p);
   if(imgs.length>1){
-    // Gallery: صورة رئيسية + شريط صور مصغرة قابلة للضغط
     imgWrap.innerHTML = `
       <img id="modalMainImg" src="${imgs[0]}" alt="${p.name}" style="width:100%;height:280px;object-fit:cover;" onerror="this.parentElement.innerHTML=phHTML('${p.cat}',280)">
       <div class="modal-thumbs">
@@ -628,7 +628,6 @@ function switchModalImg(src,el){
 function modalAddToCart(){ addToCart(currentProductId); closeModal('productModal'); }
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 
-// ══ مشاركة المنتج (Web Share API مع بديل نسخ الرابط/واتساب) ══
 function shareProduct(){
   const p=products.find(x=>x.id===currentProductId);
   if(!p)return;
@@ -780,7 +779,6 @@ async function sendOrder(){
   };
   orders.unshift(order); saveOrders();
 
-  // كنبدلو المخزون محليا مباشرة (السيرفر ديجا بدلو، هادي غير باش الواجهة تبان محدثة فالحين بلا ما نستناو)
   cart.forEach(it=>{
     const p = products.find(x=>x.id===it.id);
     if(p) p.stock = Math.max(0, p.stock - it.qty);
@@ -807,7 +805,7 @@ function sendContactMsg(){
 }
 
 // ══════════════════════════════
-//  ADMIN — تسجيل الدخول عبر السيرفر (checkLogin) بدل المقارنة المحلية
+//  ADMIN
 // ══════════════════════════════
 async function adminLogin(){
   const pass=document.getElementById('adminPass').value;
@@ -866,7 +864,6 @@ function loadOverview(){
   `).join('');
 }
 
-// ══ إحصائيات المبيعات (أرباح اليوم/الشهر/الإجمالي، عدد الزبائن، الأكثر مبيعاً) ══
 async function loadStats(){
   const res = await apiCall('getStats');
   if (!res || res.status === 'error' || !res.stats) return;
@@ -1038,7 +1035,7 @@ window.addEventListener('scroll',()=>{
 });
 
 // ══════════════════════════════
-//  SECRET LONG PRESS ON LOGO (2 ثواني) — يفتح لوحة الأدمن
+//  SECRET LONG PRESS ON LOGO
 // ══════════════════════════════
 (function(){
   const logo = document.getElementById('logoArea');
@@ -1062,7 +1059,6 @@ loadProductsFromCloud();
 updateBadge();
 initRippleEffect();
 
-// شريط البحث السريع فالهيدر: كيبحث مباشرة وكيوجه لصفحة المنتجات (مع تأخير بسيط)
 document.getElementById('quickSearchInput').addEventListener('input', debounce(function(){
   if(!document.getElementById('page-products').classList.contains('active')){
     showPage('products');
