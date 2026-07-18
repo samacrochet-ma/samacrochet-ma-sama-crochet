@@ -33,7 +33,7 @@
 // ══════════════════════════════
 //  BACKEND CONFIG (خاصك تبدل هاد الرابط برابط الـ Apps Script ديالك)
 // ══════════════════════════════
-const SHEET_API = "https://script.google.com/macros/s/AKfycbz0rv4T0A2dFlAcNHc9LlYCOa3hgDX2pbR_Gl2vmSC9x36USVUr9gpgBC_xp-nvFY_9/exec";
+const SHEET_API = "https://script.google.com/macros/s/AKfycbw29vMBsvGs21Eistfe6tx3PUCt1l_huTmTHvXb8Djd5mB0iv40YKeap-tQgYEy2GbSYg/exec";
 const WHATSAPP_NUMBER = "212621091399";
 
 let useCloud = false;
@@ -139,10 +139,6 @@ function renderOrdersTable(list) {
     const dateDisplay = o.date || '—';
     const status = o.status || 'قيد المعالجة';
     const rowId = `orderStatus_${i}`;
-    // كنخبيو القيم الخام (phone/date/total) باش نستعملوهم فمطابقة السطر فالشيت وقت تحديث الحالة
-    const rawPhone = String(o.phone||'').replace(/"/g,'&quot;');
-    const rawDate  = String(o.date||'').replace(/"/g,'&quot;');
-    const rawTotal = String(o.total||'');
 
     return `
     <div class="order-card">
@@ -157,7 +153,7 @@ function renderOrdersTable(list) {
           <select id="${rowId}_select">
             ${ORDER_STATUS_OPTIONS.map(s=>`<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('')}
           </select>
-          <button class="status-save-btn" onclick="updateOrderStatusAdmin('${rawPhone}','${rawDate}','${rawTotal}','${rowId}',this)">
+          <button class="status-save-btn" onclick="updateOrderStatusAdmin(${o._row},'${rowId}',this)">
             <i class="fas fa-check"></i> حفظ
           </button>
         </div>
@@ -181,7 +177,7 @@ function renderOrdersTable(list) {
   }).join('');
 }
 
-async function updateOrderStatusAdmin(phone, date, total, rowId, btnEl){
+async function updateOrderStatusAdmin(row, rowId, btnEl){
   const select = document.getElementById(rowId+'_select');
   const newStatus = select.value;
   const originalHTML = btnEl.innerHTML;
@@ -189,14 +185,14 @@ async function updateOrderStatusAdmin(phone, date, total, rowId, btnEl){
   btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
   try {
-    const res = await apiCall('updateOrderStatus', {phone, date, total, status:newStatus});
+    const res = await apiCall('updateOrderStatus', {row, status:newStatus});
     if (res && res.status !== 'error') {
       const pill = document.getElementById(rowId+'_pill');
       pill.textContent = newStatus;
       pill.className = 'track-status-pill ' + statusBadgeClass(newStatus);
       toast('تم تحديث حالة الطلب ✅','success');
     } else {
-      toast('ماقدرناش نبدلو الحالة، حاولي مرة أخرى ❌','danger');
+      toast('ماقدرناش نبدلو الحالة: ' + (res && res.message ? res.message : 'خطأ غير معروف') + ' ❌','danger');
     }
   } catch(e){
     toast('مشكل فالاتصال ❌','danger');
